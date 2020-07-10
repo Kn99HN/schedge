@@ -62,6 +62,23 @@ public class App {
     new SectionEndpoint().addTo(app);
   }
 
+  public static Javalin runTest() {
+    Javalin app =
+        Javalin
+            .create(config -> {
+              config.enableCorsForAllOrigins();
+              config.enableWebjars();
+            })
+            .start(8000);
+    new SubjectsEndpoint().addTo(app);
+    new SchoolsEndpoint().addTo(app);
+    new CoursesEndpoint().addTo(app);
+    new SearchEndpoint().addTo(app);
+    new NonOnlineEndpoint().addTo(app);
+    new SectionEndpoint().addTo(app);
+    return app;
+  }
+
   private static SslContextFactory getSslContextFactory() {
     SslContextFactory sslContextFactory = new SslContextFactory.Server();
     URL resource = Utils.class.getResource("/keystore.jks");
