@@ -7,6 +7,8 @@ import org.junit.jupiter.params.provider.CsvSource;
 import api.App;
 import kong.unirest.Unirest;
 import kong.unirest.HttpResponse;
+import kong.unirest.JsonNode;
+import kong.unirest.json.*;
 import io.javalin.Javalin;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,11 +31,27 @@ class EndpointTests {
 
     @Test
     @DisplayName("Testing School Endpoint")
-    public void TestSchoolsEndpoint() {
+    public void TestSchoolEndpoint() {
         String schoolJson = JavalinJson.toJson(SubjectCode.allSchools());
         HttpResponse response = Unirest.get("http://localhost:8000/schools").asString();
         assertEquals(response.getStatus(), 200, "Response status is the same for subject endpoint");
         assertEquals(response.getBody(), schoolJson, "Response is the same");
+    }
+
+    // Mkaking request to course then using reg number to make
+    // request to section endpoints and verify that.
+    @Test
+    @DisplayName("Testing Course Endpoint")
+    public void TestCourseEndpoint() {
+        String subjectCode = "CSCI";
+        String schoolCode = "UA";
+        HttpResponse<JsonNode> response = Unirest.get("http://localhost:8000/2020/fa/UA/CSCI").asJson();
+        assertEquals(response.getStatus(), 200, "Response status is the same for subject endpoint");
+        JSONObject myObj = response.getBody().getObject();
+        // extract fields from the object
+        System.out.println(myObj);
+        // String msg = myObj.getString("");
+        // JSONArray results = myObj.getJSONArray();
     }
     
 }
