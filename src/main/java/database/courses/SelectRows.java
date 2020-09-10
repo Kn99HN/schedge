@@ -70,13 +70,15 @@ public class SelectRows {
         + "sections.min_units, sections.max_units, sections.location,"
         + "sections.instruction_mode "
         + "FROM courses JOIN sections ON courses.id = sections.course_id "
-        + "JOIN is_teaching_section its on sections.id = its.section_id "
+        + "LEFT JOIN is_teaching_section its on sections.id = its.section_id "
         + "WHERE " + conditions + " GROUP BY courses.id, sections.id");
     Utils.setArray(stmt, objects);
 
+    System.out.println(stmt);
     ResultSet rs = stmt.executeQuery();
     ArrayList<Row> rows = new ArrayList<>();
     while (rs.next()) {
+      System.out.println(rs.toString());
       rows.add(new Row(rs, meetingsList.get(rs.getInt("section_id"))));
     }
 
@@ -131,7 +133,7 @@ public class SelectRows {
         + "sections.campus, sections.instruction_mode, "
         + "sections.grading, sections.notes, sections.prerequisites "
         + "FROM courses JOIN sections ON courses.id = sections.course_id "
-        + "JOIN is_teaching_section its on sections.id = its.section_id "
+        + "LEFT JOIN is_teaching_section its on sections.id = its.section_id "
         + "WHERE " + conditions + " GROUP BY courses.id, sections.id");
 
     Utils.setArray(stmt, objects);

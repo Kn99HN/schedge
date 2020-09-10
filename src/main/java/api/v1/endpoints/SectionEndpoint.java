@@ -97,6 +97,7 @@ public final class SectionEndpoint extends Endpoint {
               .findAny()
               .map(c -> c.getSections().get(0))
               .orElse(null);
+
         return RowsToCourses
             .rowsToCourses(
                 SelectRows.selectRow(conn, epoch, registrationNumber))

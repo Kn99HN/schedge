@@ -30,18 +30,19 @@ public class UpdateInstructors {
       throws SQLException {
     PreparedStatement stmt =
         conn.prepareStatement("UPDATE instructors SET "
-                              + "rmp_rating = ?, rmp_tid  = ? WHERE id = ?");
+                              + "rmp_rating = ?, rmp_tid  = ?, reviews = ? WHERE id = ?");
     GetRatings.getRatings(instructors.iterator(), batchSizeNullable)
         .filter(rating -> rating.rmpTeacherId != -1 && rating.rating != -1.0f)
         .forEach(rating -> {
           try {
             if (Utils
                     .setArray(stmt, rating.rating, rating.rmpTeacherId,
+                              String.join(";", rating.reviews),
                               rating.instructorId)
                     .executeUpdate() != 1) {
               throw new RuntimeException("what the heck");
             }
-          } catch (SQLException e) {
+          } catch (Exception e) {
             throw new RuntimeException(e);
           }
         });

@@ -10,11 +10,14 @@ import org.slf4j.LoggerFactory;
 import picocli.CommandLine;
 import scraping.GetRatings;
 import scraping.models.Instructor;
+import scraping.models.Rating;
 import scraping.query.QueryCatalog;
 import scraping.query.QuerySchool;
 import scraping.query.QuerySection;
-
+import scraping.models.Review;
 import java.util.List;
+import java.util.stream.Stream;
+import java.util.ArrayList;
 
 /*
    @Todo: Add annotation for parameter. Fix the method to parse.
@@ -110,10 +113,10 @@ public class Query implements Runnable {
   rmp(@CommandLine.Mixin OutputFileMixin outputFile, Integer batchSize) {
     long start = System.nanoTime();
     GetConnection.withConnection(conn -> {
-      List<Instructor> instructors =
-          UpdateInstructors.instructorUpdateList(conn);
-      outputFile.writeOutput(
-          GetRatings.getRatings(instructors.iterator(), batchSize));
+        List<Instructor> instructors =
+                UpdateInstructors.instructorUpdateList(conn);
+        outputFile.writeOutput(
+                GetRatings.getRatings(instructors.iterator(), batchSize));
     });
     long end = System.nanoTime();
     logger.info((end - start) / 1000000000 + " seconds");

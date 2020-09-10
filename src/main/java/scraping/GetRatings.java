@@ -13,11 +13,19 @@ import scraping.models.Instructor;
 import scraping.models.Rating;
 import scraping.query.GetClient;
 import utils.SimpleBatchedFutureEngine;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import java.util.concurrent.CompletableFuture;
+
 
 import java.util.Iterator;
 import java.util.concurrent.Future;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
+import scraping.models.Review;
+import java.util.List;
+import java.util.ArrayList;
 
 public final class GetRatings {
 
@@ -26,6 +34,8 @@ public final class GetRatings {
       "https://www.ratemyprofessors.com/ShowRatings.jsp?tid=";
   private static final String RMP_URL =
       "https://www.ratemyprofessors.com/search.jsp?queryBy=teacherName&schoolID=675&query=";
+
+  private static final String RMP_COMMENT_URL = "https://www.ratemyprofessors.com/paginate/professors/ratings?tid=";
 
   /**
    * Two step process, first given the list of instructors,
@@ -37,9 +47,6 @@ public final class GetRatings {
    * -> rmp-id: 1134872
    * 2. We then use the rmp-id to query the rating itself
    * -> https://www.ratemyprofessors.com/ShowRatings.jsp?tid=1134872;
-   * @param names
-   * @param batchSizeNullable
-   * @return
    */
   public static Stream<Rating> getRatings(Iterator<Instructor> names,
                                           Integer batchSizeNullable) {
@@ -58,19 +65,46 @@ public final class GetRatings {
               try {
                 return queryRatingAsync(instructor.name, instructor.id);
               } catch (Exception e) {
+                logger.warn(e.getMessage());
                 throw new RuntimeException(e);
               }
             });
-
-    return StreamSupport.stream(engine.spliterator(), false)
-        .filter(i -> i != null);
+   Stream<Rating> ratings = StreamSupport.stream(engine.spliterator(), false).filter(i -> i != null);
+   final List<Rating> output = new ArrayList<>();
+   ratings.forEach(rating -> {
+    List<String> reviews = new ArrayList<>();
+    try {
+      if(rating.rmpTeacherId != -1) {
+        List<Integer> pages = queryPages(rating.rmpTeacherId).get();
+        SimpleBatchedFutureEngine<Integer, List<String>> currentRating = new SimpleBatchedFutureEngine<Integer, List<String>>(
+            pages.iterator(), pages.size(), (page, tmp) -> {
+              try {
+                Future<List<String>> rev = queryComment(rating.rmpTeacherId, page);
+                return rev;
+              } catch (Exception e) {
+                throw new RuntimeException(e);
+              }
+            }
+          );
+        Stream<List<String>> str = StreamSupport.stream(currentRating.spliterator(), false).filter(i -> i != null);
+        // fix this logic;
+        str.forEach((stream) -> {
+          reviews.addAll(stream);
+        });
+        rating.addReview(reviews);
+      }
+   } catch (Exception e) {
+    logger.warn(e.getMessage());
+    throw new RuntimeException(e);
+    }
+    output.add(rating);
+  });
+    return output.stream();
   }
 
   /**
    * Given at instructor, will find the coresponding
    * rmp-id for the instructor.
-   * @param instructor
-   * @return
    */
   private static Future<Instructor> getLinkAsync(Instructor instructor) {
     String param = parseInstructorName(instructor.name);
@@ -106,10 +140,7 @@ public final class GetRatings {
 
   /**
    * Given the rmp-id, we get the rating.
-   * Rating can be either a float or N/A, in the case of N/A, we return 0.0
-   * @param url
-   * @param id
-   * @return
+   * Rating can be either a float or N/A, in the case of N/A, we return -1.0
    */
   private static Future<Rating> queryRatingAsync(String url, int id) {
     Request request = new RequestBuilder()
@@ -128,12 +159,82 @@ public final class GetRatings {
           }
           if (url == null) {
             logger.warn("URL is null for id=" + id);
-            return new Rating(id, -1, -1.0f);
+            return new Rating(id, -1, -1.0f, new ArrayList<String>());
           }
 
           return new Rating(id, Integer.parseInt(url),
-                            parseRating(resp.getResponseBody(), id));
+                            parseRating(resp.getResponseBody(), id), new ArrayList<String>());
         });
+  }
+
+  public static Future<List<String>> queryComment(int id, int page) {
+    Request request = new RequestBuilder()
+                    .setUri(Uri.create(RMP_COMMENT_URL + id + "&page=" + page))
+                    .setRequestTimeout(60000)
+                    .setMethod("GET")
+                    .build();
+
+    return GetClient.getClient()
+            .executeRequest(request)
+            .toCompletableFuture()
+            .handleAsync((resp, throwable) -> {
+              return parseComment(resp.getResponseBody());
+            });
+  }
+
+  public static Future<List<Integer>> queryPages(int id) {
+    Request request = new RequestBuilder()
+                    .setUri(Uri.create(RMP_COMMENT_URL + id))
+                    .setRequestTimeout(60000)
+                    .setMethod("GET")
+                    .build();
+    return GetClient.getClient()
+            .executeRequest(request)
+            .toCompletableFuture()
+            .handleAsync((resp, throwable) -> {
+              return getRemaining(resp.getResponseBody());
+            });
+  }
+
+  public static List<Integer> getRemaining(String rawData) {
+    ObjectMapper objMapper = new ObjectMapper();
+    List<Integer> pages = new ArrayList();
+    try {
+      JsonNode json = objMapper.readTree(rawData);
+      if(json == null) {
+        return pages;
+      }
+      int remaining = json.get("remaining").intValue();
+      if(remaining == 0) {
+        return pages;
+      }
+      int totalPages = ((int) Math.floor(remaining / 20)) + 2;
+      for(int i = 1; i <= totalPages; i++) {
+        pages.add(i);
+      }
+    } catch(JsonProcessingException e) {
+      logger.warn("Cannot parse to JSON");
+    }
+    return pages;
+  }
+
+  
+  public static List<String> parseComment(String rawData) {
+    ObjectMapper objMapper = new ObjectMapper();
+    List<String> reviews = new ArrayList<>();
+    try {
+      JsonNode json = objMapper.readTree(rawData);
+      JsonNode reviewsJSON = json.get("ratings");
+      if(reviewsJSON.isArray()) {
+        for(final JsonNode review : reviewsJSON) {
+          String cmt = review.get("rComments").toString().replace("\"", "");
+          reviews.add(cmt);
+        }
+      }
+    } catch(JsonProcessingException e) {
+      logger.warn("Cannot parse to JSON");
+    }
+    return reviews;
   }
 
   private static float parseRating(String rawData, int id) {
@@ -188,7 +289,7 @@ public final class GetRatings {
     Elements professors = innerListings.select("li.listing.PROFESSOR");
     for (Element element : professors) {
       String school =
-          element.selectFirst("span.sub").toString(); // <- Bugs at this line
+          element.selectFirst("span.sub").toString(); 
       if (school.contains("New York University") || school.contains("NYU")) {
         return element.selectFirst("a").attr("href").split("=")[1];
       }

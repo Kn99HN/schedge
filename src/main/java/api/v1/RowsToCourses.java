@@ -51,6 +51,7 @@ public class RowsToCourses {
 
     List<Row> recitationRecords =
         rows.map(row -> {
+              System.out.println("Row" + row.toString());
               if (!courses.containsKey(row.courseId))
                 courses.put(row.courseId,
                             new Course(row.name, row.deptCourseId, null,
@@ -67,7 +68,7 @@ public class RowsToCourses {
 
     recitationRecords.stream().forEach(row -> {
       Section s = sections.get(row.associatedWith);
-
+      System.out.println("Section" + s.toString());
       if (s != null)
         s.addRecitation(Section.fromRow(row));
       else // Orphans get added to course regardless

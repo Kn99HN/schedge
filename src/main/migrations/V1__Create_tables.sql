@@ -28,6 +28,7 @@ CREATE TABLE instructors (
   subject             varchar                     NOT NULL,
   rmp_rating          real,
   rmp_tid             integer,
+  reviews             varchar,
   PRIMARY KEY (id)
 );
 
